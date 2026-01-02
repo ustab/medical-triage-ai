@@ -1,77 +1,66 @@
 import streamlit as st
 import pandas as pd
-from fpdf import FPDF
 
 # Sayfa Yapılandırması
-st.set_page_config(page_title="Smart Triage CDSS", layout="wide")
+st.set_page_config(page_title="Triage CDSS", layout="wide")
 
-# Dil Seçenekleri
-languages = {
-    "Türkçe": {"title": "Akıllı Klinik Karar Destek Sistemi", "not_label": "Doktor Notları / Ön Tanı", "risk_label": "Klinik Risk Analizi", "sdoh_label": "Sosyal Belirleyiciler (SDOH)", "btn": "Rapor Oluştur"},
-    "English": {"title": "Intelligent Clinical Decision Support System", "not_label": "Physician Notes / Pre-Diagnosis", "risk_label": "Clinical Risk Analysis", "sdoh_label": "Social Determinants of Health (SDOH)", "btn": "Generate Report"},
-    "Deutsch": {"title": "Intelligentes Klinisches Entscheidungshilfesystem", "not_label": "Arztnotizen / Vordiagnose", "risk_label": "Klinische Risikoanalyse", "sdoh_label": "Soziale Determinanten (SDOH)", "btn": "Bericht Erstellen"}
+# Dil Ayarları
+translations = {
+    "TR": {"title": "Akıllı Klinik Karar Destek Sistemi", "clinic_score": "Klinik Risk Skoru", "social_score": "Sosyal Risk Puanı", "hospital": "Hastane Adı"},
+    "EN": {"title": "Intelligent Clinical Decision Support System", "clinic_score": "Clinical Risk Score", "social_score": "Social Risk Score", "hospital": "Hospital Name"}
 }
 
-lang_choice = st.sidebar.radio("Language / Dil", list(languages.keys()))
-L = languages[lang_choice]
+lang = st.sidebar.selectbox("Dil / Language", ["TR", "EN"])
+T = translations[lang]
 
-st.title(f"🏥 {L['title']}")
+st.title(f"🏥 {T['title']}")
 
-# Sabit veya Değiştirilebilir Hastane İsmi
+# Hastane İsmi Kaydı (Persistent)
 if 'hosp_name' not in st.session_state:
-    st.session_state['hosp_name'] = "City Central Hospital"
+    st.session_state['hosp_name'] = "Merkezi Şehir Hastanesi"
 
-new_hosp = st.sidebar.text_input("Hospital Name", st.session_state['hosp_name'])
-st.session_state['hosp_name'] = new_hosp
+hosp_input = st.sidebar.text_input(T['hospital'], st.session_state['hosp_name'])
+st.session_state['hosp_name'] = hosp_input
 st.subheader(f"🏢 {st.session_state['hosp_name']}")
 
-# --- GİRİŞ ALANI ---
-notlar = st.text_area(L['not_label'], height=150, placeholder="Type clinical notes here...")
+# --- GİRİŞ PANELİ ---
+st.markdown("### Hasta Kayıt Paneli")
+notlar = st.text_area("Klinik Notlar (Semptomlar, şikayetler)", height=150)
 
-# --- ANALİZ MANTIĞI ---
-def analiz_et(metin):
+# --- KLİNİK ANALİZ MANTIĞI ---
+def analiz_yap(metin):
     metin = metin.lower()
-    tespitler = []
-    # Genişletilmiş Anahtar Kelimeler (Sizin verdiğiniz vaka için optimize edildi)
-    sozluk = {
-        "AKUT KORONER SENDROM": ["acute coronary", "chest pain", "myocardial", "göğüs ağrısı", "brustschmerzen"],
-        "KARDİYOJENİK ŞOK": ["cardiogenic shock", "kardiyojenik şok", "hypotension", "dehydrated"],
-        "SEPSİS": ["sepsis", "infection", "enfeksiyon", "fever"],
-        "İNME": ["stroke", "inme", "paralysis", "schlaganfall"]
-    }
-    for risk, kelimeler in sozluk.items():
-        if any(k in metin for k in kelimeler):
-            tespitler.append(risk)
-    return tespitler
+    skor = 0
+    # Vaka metnine özel anahtar kelimeler
+    if any(k in metin for k in ["acute coronary", "chest pain", "myocardial", "göğüs ağrısı"]): skor += 40
+    if any(k in metin for k in ["cardiogenic shock", "kardiyojenik şok", "dehydrated"]): skor += 40
+    if any(k in metin for k in ["anxious", "breath", "nefes darlığı"]): skor += 20
+    return min(skor, 100)
 
-bulunan_riskler = analiz_et(notlar)
+klinik_skor = analiz_yap(notlar)
 
-# --- EKRAN ÇIKTISI ---
+# --- GÖRSELLEŞTİRME ---
 col1, col2 = st.columns(2)
 
 with col1:
-    st.header(L['risk_label'])
-    for r in ["AKUT KORONER SENDROM", "KARDİYOJENİK ŞOK", "SEPSİS", "İNME"]:
-        if r in bulunan_riskler:
-            st.error(f"🚨 {r} - RISK DETECTED")
-        else:
-            st.success(f"✅ {r} - Normal")
+    st.write(f"**{T['clinic_score']}**")
+    if klinik_skor >= 80:
+        st.error(f"%{klinik_skor} - KRİTİK RİSK")
+        st.progress(klinik_skor / 100)
+    else:
+        st.info(f"%{klinik_skor}")
+        st.progress(klinik_skor / 100)
 
 with col2:
-    st.header(L['sdoh_label'])
-    # SDOH Kelime Avı
-    sdoh_risk = False
-    if any(k in notlar.lower() for k in ["lives alone", "financial", "no caregiver", "yalnız yaşıyor", "maddi"]):
-        st.warning("⚠️ High Social Risk: Vulnerable Patient Profile")
-        sdoh_risk = True
-    else:
-        st.info("ℹ️ Social status appears stable.")
+    # Sosyal Risk (SDOH)
+    st.write(f"**{T['social_score']}**")
+    sosyal_skor = 75 if any(k in notlar.lower() for k in ["alone", "financial", "no caregiver"]) else 0
+    st.write(f"{sosyal_skor}")
+    if sosyal_skor > 50:
+        st.warning("🚨 SOSYAL UYARI: Taburcu sonrası geri dönüş riski yüksek!")
 
-# Triage Level
-if len(bulunan_riskler) > 0:
-    st.divider()
-    st.markdown("### 🚩 RECOMMENDED ACTION: **IMMEDIATE INTERVENTION (LEVEL 1)**")
+st.divider()
+if klinik_skor >= 80:
+    st.markdown("## 🚩 TAVSİYE: ACİL MÜDAHALE (DÜZEY 1)")
+    st.markdown("⚠️ *Hasta akut koroner sendrom ve şok belirtileri gösteriyor.*")
 
-if st.button(L['btn']):
-    st.balloons()
-    st.write("PDF Report is being generated...")
