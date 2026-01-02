@@ -1,67 +1,50 @@
 import streamlit as st
-import pandas as pd
 
-# Sayfa Yapılandırması
-st.set_page_config(page_title="Triage CDSS", layout="wide")
+# Sayfa Ayarları
+st.set_page_config(page_title="Triage AI", layout="wide")
 
-# Dil Ayarları
-translations = {
-    "TR": {"title": "Akıllı Klinik Karar Destek Sistemi", "clinic_score": "Klinik Risk Skoru", "social_score": "Sosyal Risk Puanı", "hospital": "Hastane Adı"},
-    "EN": {"title": "Intelligent Clinical Decision Support System", "clinic_score": "Clinical Risk Score", "social_score": "Social Risk Score", "hospital": "Hospital Name"}
-}
+# Dil Seçimi
+lang = st.sidebar.selectbox("Language / Dil", ["EN", "TR"])
 
-lang = st.sidebar.selectbox("Dil / Language", ["TR", "EN"])
-T = translations[lang]
+t = {
+    "EN": {"title": "Intelligent Clinical Decision Support System", "clinic": "Clinical Risk Score", "social": "Social Risk Score", "alert": "EMERGENCY: IMMEDIATE INTERVENTION"},
+    "TR": {"title": "Akıllı Klinik Karar Destek Sistemi", "clinic": "Klinik Risk Skoru", "social": "Sosyal Risk Puanı", "alert": "ACİL: HEMEN MÜDAHALE"}
+}[lang]
 
-st.title(f"🏥 {T['title']}")
+st.title(f"🏥 {t['title']}")
 
-# Hastane İsmi Kaydı (Persistent)
-if 'hosp_name' not in st.session_state:
-    st.session_state['hosp_name'] = "Merkezi Şehir Hastanesi"
+# Hastane İsmi
+if 'h_name' not in st.session_state: st.session_state['h_name'] = "NIZAMIYE HOSPITAL NIGERIA"
+st.session_state['h_name'] = st.sidebar.text_input("Hospital", st.session_state['h_name'])
+st.subheader(f"🏢 {st.session_state['h_name']}")
 
-hosp_input = st.sidebar.text_input(T['hospital'], st.session_state['hosp_name'])
-st.session_state['hosp_name'] = hosp_input
-st.subheader(f"🏢 {st.session_state['hosp_name']}")
+# Giriş Alanı
+notlar = st.text_area("Physician Notes / Doktor Notları", height=150)
 
-# --- GİRİŞ PANELİ ---
-st.markdown("### Hasta Kayıt Paneli")
-notlar = st.text_area("Klinik Notlar (Semptomlar, şikayetler)", height=150)
+# --- ANALİZ MANTIĞI (Burayı Çok Hassas Ayarladım) ---
+def analiz(txt):
+    txt = txt.lower()
+    s = 0
+    # Eğer bu kelimelerden biri varsa skoru artır
+    if "acute coronary" in txt or "chest pain" in txt: s += 50
+    if "shock" in txt or "cardiogenic" in txt: s += 50
+    return min(s, 100)
 
-# --- KLİNİK ANALİZ MANTIĞI ---
-def analiz_yap(metin):
-    metin = metin.lower()
-    skor = 0
-    # Vaka metnine özel anahtar kelimeler   
-    if any(k in metin for k in ["acute coronary", "chest pain", "myocardial", "göğüs ağrısı"]): skor += 40
-    if any(k in metin for k in ["cardiogenic shock", "kardiyojenik şok", "dehydrated"]): skor += 40
-    if any(k in metin for k in ["anxious", "breath", "nefes darlığı"]): skor += 20
-    return min(skor, 100)
+c_score = analiz(notlar)
+s_score = 75 if ("alone" in notlar.lower() or "financial" in notlar.lower()) else 0
 
-klinik_skor = analiz_yap(notlar)
-
-# --- GÖRSELLEŞTİRME ---
+# Görsel Çıktı
 col1, col2 = st.columns(2)
-
 with col1:
-    st.write(f"**{T['clinic_score']}**")
-    if klinik_skor >= 80:
-        st.error(f"%{klinik_skor} - KRİTİK RİSK")
-        st.progress(klinik_skor / 100)
-    else:
-        st.info(f"%{klinik_skor}")
-        st.progress(klinik_skor / 100)
+    st.metric(t['clinic'], f"%{c_score}")
+    st.progress(c_score / 100)
+    if c_score >= 80: st.error(t['alert'])
 
 with col2:
-    # Sosyal Risk (SDOH)
-    st.write(f"**{T['social_score']}**")
-    sosyal_skor = 75 if any(k in notlar.lower() for k in ["alone", "financial", "no caregiver"]) else 0
-    st.write(f"{sosyal_skor}")
-    if sosyal_skor > 50:
-        st.warning("🚨 SOSYAL UYARI: Taburcu sonrası geri dönüş riski yüksek!")
+    st.metric(t['social'], s_score)
+    if s_score > 50: st.warning("⚠️ High Social Risk")
 
 st.divider()
-if klinik_skor >= 80:
-    st.markdown("## 🚩 TAVSİYE: ACİL MÜDAHALE (DÜZEY 1)")
-    st.markdown("⚠️ *Hasta akut koroner sendrom ve şok belirtileri gösteriyor.*")
-
-
+if c_score >= 80:
+    st.markdown(f"### 🚩 **{t['alert']}**")
+    st.balloons()
