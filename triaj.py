@@ -31,7 +31,7 @@ notlar = st.text_area("Klinik Notlar (Semptomlar, şikayetler)", height=150)
 def analiz_yap(metin):
     metin = metin.lower()
     skor = 0
-    # Vaka metnine özel anahtar kelimeler
+    # Vaka metnine özel anahtar kelimeler   
     if any(k in metin for k in ["acute coronary", "chest pain", "myocardial", "göğüs ağrısı"]): skor += 40
     if any(k in metin for k in ["cardiogenic shock", "kardiyojenik şok", "dehydrated"]): skor += 40
     if any(k in metin for k in ["anxious", "breath", "nefes darlığı"]): skor += 20
@@ -63,4 +63,5 @@ st.divider()
 if klinik_skor >= 80:
     st.markdown("## 🚩 TAVSİYE: ACİL MÜDAHALE (DÜZEY 1)")
     st.markdown("⚠️ *Hasta akut koroner sendrom ve şok belirtileri gösteriyor.*")
+
 
